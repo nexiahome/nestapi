@@ -1,9 +1,13 @@
 # Firego
 ---
-[![Build Status](https://travis-ci.org/CloudCom/firego.svg?branch=master)](https://travis-ci.org/CloudCom/firego) [![Coverage Status](https://coveralls.io/repos/CloudCom/firego/badge.svg)](https://coveralls.io/r/CloudCom/firego)
+[![Build Status](https://travis-ci.org/jgeiger/nestapi.svg?branch=master)](https://travis-ci.org/jgeiger/nestapi) [![Coverage Status](https://coveralls.io/repos/jgeiger/nestapi/badge.svg)](https://coveralls.io/r/jgeiger/nestapi)
 ---
 
-A Firebase client written in Go
+A Nest API client written in Go
+
+Almost all of this code was copied from [firego](https://github.com/CloudCom/firego)
+I removed the parts that aren't needed for the Nest API, and changed the watch to return the full JSON string instead of interfaces. We know what Nest will provide so we can
+just Unmarshall the JSON into a struct.
 
 ##### Under Development
 The API may or may not change radically within the next upcoming weeks.
@@ -11,31 +15,31 @@ The API may or may not change radically within the next upcoming weeks.
 ## Installation
 
 ```bash
-go get -u github.com/CloudCom/firego
+go get -u github.com/jgeiger/nestapi
 ```
 
 ## Usage
 
-Import firego
+Import nestapi
 
 ```go
-import "github.com/CloudCom/firego"
+import "github.com/jgeiger/nestapi"
 ```
 
-Create a new firego reference
+Create a new nestapi reference
 
 ```go
-f := firego.New("https://my-firebase-app.firebaseIO.com")
+f := nestapi.New("https://api.home.nest.com")
 ```
 
 ### Request Timeouts
 
-By default, the `Firebase` reference will timeout after 30 seconds of trying
-to reach a Firebase server. You can configure this value by setting the global
+By default, the `NestAPI` reference will timeout after 30 seconds of trying
+to reach the Nest API server. You can configure this value by setting the global
 timeout duration
 
 ```go
-firego.TimeoutDuration = time.Minute
+nestapi.TimeoutDuration = time.Minute
 ```
 
 ### Auth Tokens
@@ -43,18 +47,6 @@ firego.TimeoutDuration = time.Minute
 ```go
 f.Auth("some-token-that-was-created-for-me")
 f.Unauth()
-```
-
-Visit [Fireauth](https://github.com/CloudCom/fireauth) if you'd like to generate your own auth tokens
-
-### Get Value
-
-```go
-var v map[string]interface{}
-if err := f.Value(&v); err != nil {
-  log.Fatal(err)
-}
-fmt.Printf("%s\n", v)
 ```
 
 ### Set Value
@@ -66,45 +58,10 @@ if err := f.Set(v); err != nil {
 }
 ```
 
-### Push Value
-
-```go
-v := "bar"
-pushedFirego, err := f.Push(v)
-if err != nil {
-	log.Fatal(err)
-}
-
-var bar string
-if err := pushedFirego.Value(&bar); err != nil {
-	log.Fatal(err)
-}
-
-// prints "https://my-firebase-app.firebaseIO.com/-JgvLHXszP4xS0AUN-nI: bar"
-fmt.Printf("%s: %s\n", pushedFirego, bar)
-```
-
-### Update Child
-
-```go
-v := map[string]string{"foo":"bar"}
-if err := f.Update(v); err != nil {
-  log.Fatal(err)
-}
-```
-
-### Remove Value
-
-```go
-if err := f.Remove(); err != nil {
-  log.Fatal(err)
-}
-```
-
 ### Watch a Node
 
 ```go
-notifications := make(chan firego.Event)
+notifications := make(chan nestapi.Event)
 if err := f.Watch(notifications); err != nil {
 	log.Fatal(err)
 }
@@ -116,8 +73,8 @@ for event := range notifications {
 fmt.Printf("Notifications have stopped")
 ```
 
-Check the [GoDocs](http://godoc.org/github.com/CloudCom/firego) or
-[Firebase Documentation](https://www.firebase.com/docs/rest/) for more details
+Check the [GoDocs](http://godoc.org/github.com/jgeiger/nestapi) or
+[Nest API Documentation](https://developer.nest.com/documentation/api-reference) for more details
 
 ## Running Tests
 

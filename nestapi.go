@@ -1,7 +1,7 @@
 /*
-Package firego is a REST client for Firebase (https://firebase.com).
+Package nestapi is a REST client for NestAPI (https://firebase.com).
 */
-package firego
+package nestapi
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 )
 
 // TimeoutDuration is the length of time any request will have to establish
-// a connection and receive headers from Firebase before returning
+// a connection and receive headers from NestAPI before returning
 // an ErrTimeout error
 var TimeoutDuration = 30 * time.Second
 
@@ -37,8 +37,8 @@ const (
 	formatVal    = "export"
 )
 
-// Firebase represents a location in the cloud
-type Firebase struct {
+// NestAPI represents a location in the cloud
+type NestAPI struct {
 	url    string
 	params _url.Values
 	client *http.Client
@@ -79,8 +79,8 @@ func redirectPreserveHeaders(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-// New creates a new Firebase reference
-func New(url string) *Firebase {
+// New creates a new NestAPI reference
+func New(url string) *NestAPI {
 
 	var tr *http.Transport
 	tr = &http.Transport{
@@ -99,7 +99,7 @@ func New(url string) *Firebase {
 		CheckRedirect: redirectPreserveHeaders,
 	}
 
-	return &Firebase{
+	return &NestAPI{
 		url:          sanitizeURL(url),
 		params:       _url.Values{},
 		client:       client,
@@ -108,24 +108,24 @@ func New(url string) *Firebase {
 }
 
 // String returns the string representation of the
-// Firebase reference
-func (fb *Firebase) String() string {
-	return fb.url
+// NestAPI reference
+func (n *NestAPI) String() string {
+	return n.url
 }
 
-// Child creates a new Firebase reference for the requested
+// Child creates a new NestAPI reference for the requested
 // child with the same configuration as the parent
-func (fb *Firebase) Child(child string) *Firebase {
-	c := &Firebase{
-		url:          fb.url + "/" + child,
+func (n *NestAPI) Child(child string) *NestAPI {
+	c := &NestAPI{
+		url:          n.url + "/" + child,
 		params:       _url.Values{},
-		client:       fb.client,
+		client:       n.client,
 		stopWatching: make(chan struct{}),
 	}
 
 	// making sure to manually copy the map items into a new
 	// map to avoid modifying the map reference.
-	for k, v := range fb.params {
+	for k, v := range n.params {
 		c.params[k] = v
 	}
 	return c
@@ -137,42 +137,42 @@ func (fb *Firebase) Child(child string) *Firebase {
 // for each key will be truncated to true.
 //
 // Reference https://www.firebase.com/docs/rest/api/#section-param-shallow
-func (fb *Firebase) Shallow(v bool) {
+func (n *NestAPI) Shallow(v bool) {
 	if v {
-		fb.params.Set(shallowParam, "true")
+		n.params.Set(shallowParam, "true")
 	} else {
-		fb.params.Del(shallowParam)
+		n.params.Del(shallowParam)
 	}
 }
 
-// IncludePriority determines whether or not to ask Firebase
+// IncludePriority determines whether or not to ask NestAPI
 // for the values priority. By default, the priority is not returned
 //
 // Reference https://www.firebase.com/docs/rest/api/#section-param-format
-func (fb *Firebase) IncludePriority(v bool) {
+func (n *NestAPI) IncludePriority(v bool) {
 	if v {
-		fb.params.Set(formatParam, formatVal)
+		n.params.Set(formatParam, formatVal)
 	} else {
-		fb.params.Del(formatParam)
+		n.params.Del(formatParam)
 	}
 }
 
-func (fb *Firebase) makeRequest(method string, body []byte) (*http.Request, error) {
-	path := fb.url + "/.json"
+func (n *NestAPI) makeRequest(method string, body []byte) (*http.Request, error) {
+	path := n.url + "/.json"
 
-	if len(fb.params) > 0 {
-		path += "?" + fb.params.Encode()
+	if len(n.params) > 0 {
+		path += "?" + n.params.Encode()
 	}
 	return http.NewRequest(method, path, bytes.NewReader(body))
 }
 
-func (fb *Firebase) doRequest(method string, body []byte) ([]byte, error) {
-	req, err := fb.makeRequest(method, body)
+func (n *NestAPI) doRequest(method string, body []byte) ([]byte, error) {
+	req, err := n.makeRequest(method, body)
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := fb.client.Do(req)
+	resp, err := n.client.Do(req)
 	switch err := err.(type) {
 	default:
 		return nil, err
@@ -184,8 +184,8 @@ func (fb *Firebase) doRequest(method string, body []byte) ([]byte, error) {
 				return nil, err
 			}
 
-			fb.url = strings.Split(loc.String(), "/.json")[0]
-			return fb.doRequest(method, body)
+			n.url = strings.Split(loc.String(), "/.json")[0]
+			return n.doRequest(method, body)
 		}
 
 	case *_url.Error:

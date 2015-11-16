@@ -1,13 +1,13 @@
-package firego
+package nestapi
 
 import "encoding/json"
 
-// Set the value of the Firebase reference
-func (fb *Firebase) Set(v interface{}) error {
+// Set the value of the NestAPI reference
+func (n *NestAPI) Set(v interface{}) error {
 	bytes, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	_, err = fb.doRequest("PUT", bytes)
+	_, err = n.doRequest("PUT", bytes)
 	return err
 }

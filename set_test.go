@@ -1,4 +1,4 @@
-package firego
+package nestapi
 
 import (
 	"testing"
@@ -16,8 +16,8 @@ func TestSet(t *testing.T) {
 	server.Start()
 	defer server.Close()
 
-	fb := New(server.URL)
-	err := fb.Set(payload)
+	n := New(server.URL)
+	err := n.Set(payload)
 	assert.NoError(t, err)
 
 	v := server.Get("")

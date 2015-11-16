@@ -1,4 +1,4 @@
-package firego
+package nestapi
 
 import (
 	"testing"
@@ -16,11 +16,11 @@ func TestAuth(t *testing.T) {
 	defer server.Close()
 
 	server.RequireAuth(true)
-	fb := New(server.URL)
+	n := New(server.URL)
 
-	fb.Auth(server.Secret)
+	n.Auth(server.Secret)
 	var v interface{}
-	err := fb.Value(&v)
+	err := n.Set(&v)
 	assert.NoError(t, err)
 }
 
@@ -31,10 +31,10 @@ func TestUnauth(t *testing.T) {
 	defer server.Close()
 
 	server.RequireAuth(true)
-	fb := New(server.URL)
+	n := New(server.URL)
 
-	fb.params.Add("auth", server.Secret)
-	fb.Unauth()
-	err := fb.Value("")
+	n.params.Add("auth", server.Secret)
+	n.Unauth()
+	err := n.Set("")
 	assert.Error(t, err)
 }
