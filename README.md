@@ -1,4 +1,4 @@
-# Firego
+# Nestapi
 ---
 [![Build Status](https://travis-ci.org/jgeiger/nestapi.svg?branch=master)](https://travis-ci.org/jgeiger/nestapi) [![Coverage Status](https://coveralls.io/repos/jgeiger/nestapi/badge.svg)](https://coveralls.io/r/jgeiger/nestapi)
 ---
