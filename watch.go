@@ -162,8 +162,9 @@ func (n *NestAPI) Watch(notifications chan Event) error {
 			case "auth_revoked":
 				// The data for this event is a string indicating that a the credential has expired
 				// This event will be sent when the supplied auth parameter is no longer valid
-
-				// TODO: handle
+				notifications <- event
+				log.Printf("Auth-Revoked: %s\n", txt)
+				break scanning
 			case "rules_debug":
 				log.Printf("Rules-Debug: %s\n", txt)
 			}
