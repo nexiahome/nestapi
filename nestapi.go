@@ -5,7 +5,7 @@ package nestapi
 
 import (
 	"bytes"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -214,7 +214,15 @@ func (n *NestAPI) doRequest(method string, body []byte) ([]byte, error) {
 		return nil, err
 	}
 	if resp.StatusCode/200 != 1 {
-		return nil, errors.New(string(respBody))
+		apiError := &APIError{}
+		err := json.Unmarshal(respBody, &apiError)
+		if err != nil {
+			return nil, &APIError{
+				Type:    "nestapi#json-parse",
+				Message: "Unable to parse Nest API JSON",
+			}
+		}
+		return nil, apiError
 	}
 	return respBody, nil
 }
