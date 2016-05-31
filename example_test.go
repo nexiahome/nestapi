@@ -4,7 +4,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/jgeiger/nestapi"
+	"github.com/nexiahome/nestapi"
 )
 
 func ExampleNestAPI_Auth() {

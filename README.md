@@ -1,6 +1,6 @@
 # Nestapi
 ---
-[![Build Status](https://travis-ci.org/jgeiger/nestapi.svg?branch=master)](https://travis-ci.org/jgeiger/nestapi) [![Coverage Status](https://coveralls.io/repos/jgeiger/nestapi/badge.svg)](https://coveralls.io/r/jgeiger/nestapi)
+[![Build Status](https://travis-ci.org/nexiahome/nestapi.svg?branch=master)](https://travis-ci.org/nexiahome/nestapi) [![Coverage Status](https://coveralls.io/repos/nexiahome/nestapi/badge.svg)](https://coveralls.io/r/nexiahome/nestapi)
 ---
 
 A Nest API client written in Go
@@ -15,7 +15,7 @@ The API may or may not change radically within the next upcoming weeks.
 ## Installation
 
 ```bash
-go get -u github.com/jgeiger/nestapi
+go get -u github.com/nexiahome/nestapi
 ```
 
 ## Usage
@@ -23,7 +23,7 @@ go get -u github.com/jgeiger/nestapi
 Import nestapi
 
 ```go
-import "github.com/jgeiger/nestapi"
+import "github.com/nexiahome/nestapi"
 ```
 
 Create a new nestapi reference
@@ -73,7 +73,7 @@ for event := range notifications {
 fmt.Printf("Notifications have stopped")
 ```
 
-Check the [GoDocs](http://godoc.org/github.com/jgeiger/nestapi) or
+Check the [GoDocs](http://godoc.org/github.com/nexiahome/nestapi) or
 [Nest API Documentation](https://developer.nest.com/documentation/api-reference) for more details
 
 ## Running Tests
