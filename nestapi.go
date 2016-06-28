@@ -18,16 +18,10 @@ import (
 
 // TimeoutDuration is the length of time any request will have to establish
 // a connection and receive headers from NestAPI before returning
-// an ErrTimeout error
-var TimeoutDuration = 30 * time.Second
+// an APIError timeout
+var TimeoutDuration = 10 * time.Second
 
 var defaultRedirectLimit = 30
-
-// ErrTimeout is an error type is that is returned if a request
-// exceeds the TimeoutDuration configured
-type ErrTimeout struct {
-	error
-}
 
 // query parameter constants
 const (
@@ -176,6 +170,7 @@ func (n *NestAPI) doRequest(method string, body []byte) ([]byte, error) {
 	switch err := err.(type) {
 	default:
 		return nil, err
+
 	case nil:
 		// check for 307 redirect
 		if resp.StatusCode == http.StatusTemporaryRedirect {
@@ -193,7 +188,7 @@ func (n *NestAPI) doRequest(method string, body []byte) ([]byte, error) {
 		// when exceeding it's `Transport`'s `ResponseHeadersTimeout`
 		e1, ok := err.Err.(net.Error)
 		if ok && e1.Timeout() {
-			return nil, ErrTimeout{err}
+			return nil, apiTimeoutError()
 		}
 
 		return nil, err
@@ -202,7 +197,7 @@ func (n *NestAPI) doRequest(method string, body []byte) ([]byte, error) {
 		// `http.Client.Do` will return a `net.Error` directly when Dial times
 		// out, or when the Client's RoundTripper otherwise returns an err
 		if err.Timeout() {
-			return nil, ErrTimeout{err}
+			return nil, apiTimeoutError()
 		}
 
 		return nil, err
@@ -213,16 +208,26 @@ func (n *NestAPI) doRequest(method string, body []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if resp.StatusCode/200 != 1 {
 		apiError := &APIError{}
 		err := json.Unmarshal(respBody, &apiError)
+
 		if err != nil {
 			return nil, &APIError{
 				Type:    "nestapi#json-parse",
 				Message: "Unable to parse Nest API JSON",
 			}
 		}
+
 		return nil, apiError
 	}
 	return respBody, nil
+}
+
+func apiTimeoutError() *APIError {
+	return &APIError{
+		Type:    "nestapi#timeout",
+		Message: "Timeout contacting Nest Server",
+	}
 }
