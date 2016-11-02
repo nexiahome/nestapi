@@ -2,25 +2,54 @@ package nestapi
 
 import (
 	"bufio"
+	"encoding/json"
 	"log"
+	"net/http"
 	"strings"
-	"sync"
 )
 
-// EventTypeError is the type that is set on an Event struct if an
-// error occurs while watching a NestAPI reference
-const EventTypeError = "event_error"
+const (
+	// EventTypePut is the event type sent when new data is inserted to the
+	// NestAPI instance.
+	EventTypePut = "put"
+	// EventTypePatch is the event type sent when data at the NestAPI instance is
+	// updated.
+	EventTypePatch = "patch"
+	// EventTypeError is the event type sent when an unknown error is encountered.
+	EventTypeError = "event_error"
+	// EventTypeAuthRevoked is the event type sent when the supplied auth parameter
+	// is no longer valid.
+	EventTypeAuthRevoked = "auth_revoked"
+
+	eventTypeKeepAlive  = "keep-alive"
+	eventTypeCancel     = "cancel"
+	eventTypeRulesDebug = "rules_debug"
+)
 
 // Event represents a notification received when watching a
-// firebase reference
+// firebase reference.
 type Event struct {
 	// Type of event that was received
 	Type string
+	// Path to the data that changed
+	Path string
 	// Data that changed
-	Data string
+	Data interface{}
+
+	RawData string
 }
 
-// StopWatching stops tears down all connections that are watching
+// Value converts the raw payload of the event into the given interface.
+func (e Event) Value(v interface{}) error {
+	var tmp struct {
+		Data interface{} `json:"data"`
+	}
+	tmp.Data = &v
+
+	return json.Unmarshal([]byte(e.RawData), &tmp)
+}
+
+// StopWatching stops tears down all connections that are watching.
 func (n *NestAPI) StopWatching() {
 	if n.isWatching() {
 		// signal connection to terminal
@@ -48,7 +77,7 @@ func (n *NestAPI) setWatching(v bool) {
 //
 // Only one connection can be established at a time. The
 // second call to this function without a call to n.StopWatching
-// will close the channel given and return nil immediately
+// will close the channel given and return nil immediately.
 func (n *NestAPI) Watch(notifications chan Event) error {
 	if n.isWatching() {
 		close(notifications)
@@ -57,11 +86,44 @@ func (n *NestAPI) Watch(notifications chan Event) error {
 	// set watching flag
 	n.setWatching(true)
 
+	stop := make(chan struct{})
+	events, err := n.watch(stop)
+	if err != nil {
+		return err
+	}
+
+	var closedManually bool
+
+	// monitor the stopWatching channel
+	// if we're told to stop, close the response Body
+	go func() {
+		<-n.stopWatching
+
+		closedManually = true
+		close(stop)
+	}()
+
+	go func() {
+		for event := range events {
+			if event.Type == EventTypeError && closedManually {
+				break
+			}
+
+			notifications <- event
+		}
+
+		close(notifications)
+	}()
+
+	return nil
+}
+
+func (n *NestAPI) watch(stop chan struct{}) (chan Event, error) {
 	// build SSE request
-	req, err := n.makeRequest("GET", nil)
+	req, err := http.NewRequest("GET", n.String(), nil)
 	if err != nil {
 		n.setWatching(false)
-		return err
+		return nil, err
 	}
 	req.Header.Add("Accept", "text/event-stream")
 
@@ -69,30 +131,23 @@ func (n *NestAPI) Watch(notifications chan Event) error {
 	resp, err := n.client.Do(req)
 	if err != nil {
 		n.setWatching(false)
-		return err
+		return nil, err
 	}
+
+	notifications := make(chan Event)
+
+	go func() {
+		<-stop
+		defer resp.Body.Close()
+	}()
 
 	// start parsing response body
 	go func() {
+
 		// build scanner for response body
 		scanner := bufio.NewReader(resp.Body)
-		var (
-			scanErr        error
-			closedManually bool
-			mtx            sync.Mutex
-		)
+		var scanErr error
 
-		// monitor the stopWatching channel
-		// if we're told to stop, close the response Body
-		go func() {
-			<-n.stopWatching
-
-			mtx.Lock()
-			closedManually = true
-			mtx.Unlock()
-
-			resp.Body.Close()
-		}()
 	scanning:
 		for scanErr == nil {
 			// split event string
@@ -140,18 +195,29 @@ func (n *NestAPI) Watch(notifications chan Event) error {
 
 			// create a base event
 			event := Event{
-				Type: strings.Replace(parts[0], "event: ", "", 1),
+				Type:    strings.Replace(parts[0], "event: ", "", 1),
+				RawData: strings.Replace(parts[1], "data: ", "", 1),
 			}
 
 			// should be reacting differently based off the type of event
 			switch event.Type {
-			case "put", "patch": // we've got extra data we've got to parse
-				event.Data = strings.Replace(parts[1], "data: ", "", 1)
+			case EventTypePut, EventTypePatch:
+				// we've got extra data we've got to parse
+				var data map[string]interface{}
+				if err := json.Unmarshal([]byte(strings.Replace(parts[1], "data: ", "", 1)), &data); err != nil {
+					scanErr = err
+					break scanning
+				}
+
+				// set the extra fields
+				event.Path = data["path"].(string)
+				event.Data = data["data"]
+
 				// ship it
 				notifications <- event
-			case "keep-alive":
+			case eventTypeKeepAlive:
 				// received ping - nothing to do here
-			case "cancel":
+			case eventTypeCancel:
 				// The data for this event is null
 				// This event will be sent if the Security and NestAPI Rules
 				// cause a read at the requested location to no longer be allowed
@@ -159,32 +225,26 @@ func (n *NestAPI) Watch(notifications chan Event) error {
 				// send the cancel event
 				notifications <- event
 				break scanning
-			case "auth_revoked":
+			case EventTypeAuthRevoked:
 				// The data for this event is a string indicating that a the credential has expired
 				// This event will be sent when the supplied auth parameter is no longer valid
+				event.Data = strings.Replace(parts[1], "data: ", "", 1)
 				notifications <- event
-				log.Printf("Auth-Revoked: %s\n", txt)
 				break scanning
-			case "rules_debug":
+			case eventTypeRulesDebug:
 				log.Printf("Rules-Debug: %s\n", txt)
 			}
 		}
 
-		// check error type
-		mtx.Lock()
-		closed := closedManually
-		mtx.Unlock()
-		if !closed && scanErr != nil {
+		if scanErr != nil {
 			notifications <- Event{
 				Type: EventTypeError,
-				Data: scanErr.Error(),
+				Data: scanErr,
 			}
 		}
 
-		// call stop watching to reset state and cleanup routines
-		n.StopWatching()
+		// cleanup routines
 		close(notifications)
-
 	}()
-	return nil
+	return notifications, nil
 }

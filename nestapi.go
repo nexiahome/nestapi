@@ -23,19 +23,25 @@ var TimeoutDuration = 10 * time.Second
 
 var defaultRedirectLimit = 30
 
+// ErrTimeout is an error type is that is returned if a request
+// exceeds the TimeoutDuration configured.
+type ErrTimeout struct {
+	error
+}
+
 // query parameter constants
 const (
-	authParam    = "auth"
-	formatParam  = "format"
-	shallowParam = "shallow"
-	formatVal    = "export"
+	authParam = "auth"
 )
 
-// NestAPI represents a location in the cloud
+// NestAPI represents a location in the cloud.
 type NestAPI struct {
 	url    string
 	params _url.Values
 	client *http.Client
+
+	eventMtx   sync.Mutex
+	eventFuncs map[string]chan struct{}
 
 	watchMtx     sync.Mutex
 	watching     bool
@@ -54,8 +60,9 @@ func sanitizeURL(url string) string {
 	return url
 }
 
-// Preserve headers on redirect
-// See: https://github.com/golang/go/issues/4800
+// Preserve headers on redirect.
+//
+// Reference https://github.com/golang/go/issues/4800
 func redirectPreserveHeaders(req *http.Request, via []*http.Request) error {
 	if len(via) == 0 {
 		// No redirects
@@ -73,24 +80,26 @@ func redirectPreserveHeaders(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-// New creates a new NestAPI reference
-func New(url string) *NestAPI {
+// New creates a new NestAPI reference,
+// if client is nil, http.DefaultClient is used.
+func New(url string, client *http.Client) *NestAPI {
 
-	var tr *http.Transport
-	tr = &http.Transport{
-		DisableKeepAlives: true, // https://code.google.com/p/go/issues/detail?id=3514
-		Dial: func(network, address string) (net.Conn, error) {
-			start := time.Now()
-			c, err := net.DialTimeout(network, address, TimeoutDuration)
-			tr.ResponseHeaderTimeout = TimeoutDuration - time.Since(start)
-			return c, err
-		},
-	}
+	if client == nil {
+		var tr *http.Transport
+		tr = &http.Transport{
+			DisableKeepAlives: true, // https://code.google.com/p/go/issues/detail?id=3514
+			Dial: func(network, address string) (net.Conn, error) {
+				start := time.Now()
+				c, err := net.DialTimeout(network, address, TimeoutDuration)
+				tr.ResponseHeaderTimeout = TimeoutDuration - time.Since(start)
+				return c, err
+			},
+		}
 
-	var client *http.Client
-	client = &http.Client{
-		Transport:     tr,
-		CheckRedirect: redirectPreserveHeaders,
+		client = &http.Client{
+			Transport:     tr,
+			CheckRedirect: redirectPreserveHeaders,
+		}
 	}
 
 	return &NestAPI{
@@ -98,23 +107,56 @@ func New(url string) *NestAPI {
 		params:       _url.Values{},
 		client:       client,
 		stopWatching: make(chan struct{}),
+		eventFuncs:   map[string]chan struct{}{},
 	}
 }
 
+// Auth sets the custom NestAPI token used to authenticate to NestAPI.
+func (n *NestAPI) Auth(token string) {
+	n.params.Set(authParam, token)
+}
+
+// Unauth removes the current token being used to authenticate to NestAPI.
+func (n *NestAPI) Unauth() {
+	n.params.Del(authParam)
+}
+
+// Set the value of the NestAPI reference.
+func (n *NestAPI) Set(v interface{}) error {
+	bytes, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	_, err = n.doRequest("PUT", bytes)
+	return err
+}
+
 // String returns the string representation of the
-// NestAPI reference
+// NestAPI reference.
 func (n *NestAPI) String() string {
-	return n.url
+	path := n.url + "/.json"
+
+	if len(n.params) > 0 {
+		path += "?" + n.params.Encode()
+	}
+	return path
 }
 
 // Child creates a new NestAPI reference for the requested
-// child with the same configuration as the parent
+// child with the same configuration as the parent.
 func (n *NestAPI) Child(child string) *NestAPI {
+	c := n.copy()
+	c.url = c.url + "/" + child
+	return c
+}
+
+func (n *NestAPI) copy() *NestAPI {
 	c := &NestAPI{
-		url:          n.url + "/" + child,
+		url:          n.url,
 		params:       _url.Values{},
 		client:       n.client,
 		stopWatching: make(chan struct{}),
+		eventFuncs:   map[string]chan struct{}{},
 	}
 
 	// making sure to manually copy the map items into a new
@@ -125,43 +167,8 @@ func (n *NestAPI) Child(child string) *NestAPI {
 	return c
 }
 
-// Shallow limits the depth of the data returned when calling Value.
-// If the data at the location is a JSON primitive (string, number or boolean),
-// its value will be returned. If the data is a JSON object, the values
-// for each key will be truncated to true.
-//
-// Reference https://www.firebase.com/docs/rest/api/#section-param-shallow
-func (n *NestAPI) Shallow(v bool) {
-	if v {
-		n.params.Set(shallowParam, "true")
-	} else {
-		n.params.Del(shallowParam)
-	}
-}
-
-// IncludePriority determines whether or not to ask NestAPI
-// for the values priority. By default, the priority is not returned
-//
-// Reference https://www.firebase.com/docs/rest/api/#section-param-format
-func (n *NestAPI) IncludePriority(v bool) {
-	if v {
-		n.params.Set(formatParam, formatVal)
-	} else {
-		n.params.Del(formatParam)
-	}
-}
-
-func (n *NestAPI) makeRequest(method string, body []byte) (*http.Request, error) {
-	path := n.url + "/.json"
-
-	if len(n.params) > 0 {
-		path += "?" + n.params.Encode()
-	}
-	return http.NewRequest(method, path, bytes.NewReader(body))
-}
-
 func (n *NestAPI) doRequest(method string, body []byte) ([]byte, error) {
-	req, err := n.makeRequest(method, body)
+	req, err := http.NewRequest(method, n.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
