@@ -19,9 +19,12 @@ import (
 // TimeoutDuration is the length of time any request will have to establish
 // a connection and receive headers from NestAPI before returning
 // an APIError timeout
-var TimeoutDuration = 10 * time.Second
-
-var defaultRedirectLimit = 30
+var (
+	TimeoutDuration               = 120 * time.Second
+	KeepAliveTimeoutDuration      = 35 * time.Second
+	ResponseHeaderTimeoutDuration = 10 * time.Second
+	defaultRedirectLimit          = 30
+)
 
 // ErrTimeout is an error type is that is returned if a request
 // exceeds the TimeoutDuration configured.
@@ -87,13 +90,11 @@ func New(url string, client *http.Client) *NestAPI {
 	if client == nil {
 		var tr *http.Transport
 		tr = &http.Transport{
-			DisableKeepAlives: true, // https://code.google.com/p/go/issues/detail?id=3514
-			Dial: func(network, address string) (net.Conn, error) {
-				start := time.Now()
-				c, err := net.DialTimeout(network, address, TimeoutDuration)
-				tr.ResponseHeaderTimeout = TimeoutDuration - time.Since(start)
-				return c, err
-			},
+			ResponseHeaderTimeout: ResponseHeaderTimeoutDuration,
+			DialContext: (&net.Dialer{
+				Timeout:   TimeoutDuration,
+				KeepAlive: KeepAliveTimeoutDuration,
+			}).DialContext,
 		}
 
 		client = &http.Client{
