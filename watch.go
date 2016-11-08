@@ -238,8 +238,9 @@ func (n *NestAPI) watch(stop chan struct{}) (chan Event, error) {
 
 		if scanErr != nil {
 			notifications <- Event{
-				Type: EventTypeError,
-				Data: scanErr,
+				Type:    EventTypeError,
+				Data:    scanErr,
+				RawData: scanErr.Error(),
 			}
 		}
 

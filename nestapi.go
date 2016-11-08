@@ -20,8 +20,10 @@ import (
 // a connection and receive headers from NestAPI before returning
 // an APIError timeout
 var (
-	TimeoutDuration      = 120 * time.Second
-	defaultRedirectLimit = 30
+	DialerTimeoutDuration         = 120 * time.Second
+	ResponseHeaderTimeoutDuration = 120 * time.Second
+	KeepAliveTimeoutDuration      = 35 * time.Second
+	defaultRedirectLimit          = 30
 )
 
 // ErrTimeout is an error type is that is returned if a request
@@ -86,8 +88,17 @@ func redirectPreserveHeaders(req *http.Request, via []*http.Request) error {
 func New(url string, client *http.Client) *NestAPI {
 
 	if client == nil {
+		var tr *http.Transport
+		tr = &http.Transport{
+			ResponseHeaderTimeout: ResponseHeaderTimeoutDuration,
+			DialContext: (&net.Dialer{
+				Timeout:   DialerTimeoutDuration,
+				KeepAlive: KeepAliveTimeoutDuration,
+			}).DialContext,
+		}
+
 		client = &http.Client{
-			Timeout:       TimeoutDuration,
+			Transport:     tr,
 			CheckRedirect: redirectPreserveHeaders,
 		}
 	}
